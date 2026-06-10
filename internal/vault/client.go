@@ -24,7 +24,10 @@ func NewClient() (*Client, error) {
 	}
 	token := os.Getenv("VAULT_TOKEN")
 	if token == "" {
-		home, _ := os.UserHomeDir()
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("resolving home dir: %w", err)
+		}
 		data, err := os.ReadFile(home + "/.vault-token")
 		if err != nil {
 			return nil, fmt.Errorf("no vault token: set VAULT_TOKEN or create ~/.vault-token")
@@ -72,7 +75,10 @@ func (c *Client) GetField(path, field string) (string, error) {
 		return "", fmt.Errorf("vault returned %d for path %q", resp.StatusCode, path)
 	}
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("reading response body: %w", err)
+	}
 	var kv kvResponse
 	if err := json.Unmarshal(body, &kv); err != nil {
 		return "", fmt.Errorf("parsing vault response: %w", err)
@@ -88,7 +94,10 @@ func (c *Client) GetField(path, field string) (string, error) {
 // ListFields returns all field names at a Vault path (no values).
 func (c *Client) ListFields(path string) ([]string, error) {
 	url := fmt.Sprintf("%s/v1/secret/data/%s", c.addr, path)
-	req, _ := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
 	req.Header.Set("X-Vault-Token", c.token)
 
 	resp, err := http.DefaultClient.Do(req)
@@ -101,10 +110,13 @@ func (c *Client) ListFields(path string) ([]string, error) {
 		return nil, fmt.Errorf("vault returned %d for path %q", resp.StatusCode, path)
 	}
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading response body: %w", err)
+	}
 	var kv kvResponse
 	if err := json.Unmarshal(body, &kv); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parsing vault response: %w", err)
 	}
 
 	keys := make([]string, 0, len(kv.Data.Data))
