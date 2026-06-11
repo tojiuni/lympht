@@ -15,11 +15,16 @@ type toolCall struct {
 	} `json:"tool_input"`
 }
 
-type hookResponse struct {
-	Decision  string `json:"decision"`
-	ToolInput struct {
+type hookSpecificOutput struct {
+	HookEventName      string `json:"hookEventName"`
+	PermissionDecision string `json:"permissionDecision"`
+	UpdatedInput       struct {
 		Command string `json:"command"`
-	} `json:"tool_input"`
+	} `json:"updatedInput"`
+}
+
+type hookResponse struct {
+	HookSpecificOutput hookSpecificOutput `json:"hookSpecificOutput"`
 }
 
 // RunWithFetcher reads a Claude Code PreToolUse JSON payload from r.
@@ -47,7 +52,8 @@ func RunWithFetcher(r io.Reader, w io.Writer, fetcher inject.Fetcher) error {
 	}
 
 	var resp hookResponse
-	resp.Decision = "modify"
-	resp.ToolInput.Command = substituted
+	resp.HookSpecificOutput.HookEventName = "PreToolUse"
+	resp.HookSpecificOutput.PermissionDecision = "allow"
+	resp.HookSpecificOutput.UpdatedInput.Command = substituted
 	return json.NewEncoder(w).Encode(resp)
 }

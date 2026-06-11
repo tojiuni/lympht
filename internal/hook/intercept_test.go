@@ -48,14 +48,15 @@ func TestRun_SubstitutesPlaceholder(t *testing.T) {
 	if err := json.Unmarshal([]byte(out.String()), &resp); err != nil {
 		t.Fatalf("output is not valid JSON: %v\noutput: %s", err, out.String())
 	}
-	decision, _ := resp["decision"].(string)
-	if decision != "modify" {
-		t.Errorf("decision = %q, want %q", decision, "modify")
+	hookOut, _ := resp["hookSpecificOutput"].(map[string]any)
+	decision, _ := hookOut["permissionDecision"].(string)
+	if decision != "allow" {
+		t.Errorf("permissionDecision = %q, want %q", decision, "allow")
 	}
-	toolInput, _ := resp["tool_input"].(map[string]any)
-	cmd, _ := toolInput["command"].(string)
-	if cmd != "echo secret99" {
-		t.Errorf("command = %q, want %q", cmd, "echo secret99")
+	updatedInput, _ := hookOut["updatedInput"].(map[string]any)
+	cmd, _ := updatedInput["command"].(string)
+	if cmd != "echo 'secret99'" {
+		t.Errorf("command = %q, want %q", cmd, "echo 'secret99'")
 	}
 }
 
