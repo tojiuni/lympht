@@ -211,7 +211,7 @@ func TestSubstituteSpecialCharPasswords(t *testing.T) {
 			// after the variable is set (not before, as with `VAR=val cmd` form).
 			assignment := got[:len(got)-len(" psql")] // strip trailing " psql"
 			bashCmd := assignment + `; printf '%s' "$PGPASSWORD"`
-			out, err := exec.Command("bash", "-c", bashCmd).Output()
+			out, err := exec.Command("sh", "-c", bashCmd).Output()
 			if err != nil {
 				t.Fatalf("bash round-trip failed: %v", err)
 			}
