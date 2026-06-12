@@ -198,5 +198,5 @@ Vault secret과 k8s `github-webhook-secret`이 불일치. k8s 값으로 webhook 
 
 1. **LLM에게 실제 값을 보여주지 않는다** — `lympht inject` 결과, `vault kv get` 출력 등은 반드시 `!` 접두사로 실행
 2. **`lympht check`는 안전** — 필드명만 반환
-3. **placeholder는 안전** — `{{lympht:path#field}}` 형태는 LLM이 쓸 수 있음
+3. **placeholder는 안전** — `{{lympht:vault:path#field}}` / `{{lympht:k8s:ns/name#key}}` 형태는 LLM이 쓸 수 있음
 4. **runbook에 값 기록 금지** — 이 문서 포함 모든 문서에 실제 secret 값 절대 기록하지 않음
