@@ -19,6 +19,7 @@ type Backend interface {
 
 // MultiFetcher routes GetField and ListFields to vault or kube backend
 // based on the path prefix ("vault:" or "k8s:").
+// Vault and Kube must not be nil.
 type MultiFetcher struct {
 	Vault Backend
 	Kube  Backend

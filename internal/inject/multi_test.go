@@ -113,4 +113,17 @@ func TestMultiFetcher_ListFields_UnknownBackend(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for path without backend prefix")
 	}
+	if !strings.Contains(err.Error(), "unknown backend") {
+		t.Errorf("error %q should contain 'unknown backend'", err.Error())
+	}
+}
+
+func TestMultiFetcher_GetField_PropagatesBackendError(t *testing.T) {
+	errBackend := &stubBackend{data: map[string]string{}} // empty — GetField returns "not found"
+	multi := &inject.MultiFetcher{Vault: errBackend, Kube: &stubBackend{}}
+
+	_, err := multi.GetField("vault:neunexus/foo", "missing")
+	if err == nil {
+		t.Fatal("expected backend error to propagate")
+	}
 }
