@@ -31,8 +31,8 @@ func TestHasPlaceholders(t *testing.T) {
 		want  bool
 	}{
 		{"echo hello", false},
-		{"echo {{lympht:ns/path#key}}", true},
-		{"{{lympht:a#b}} and {{lympht:c#d}}", true},
+		{"echo {{lympht:vault:ns/path#key}}", true},
+		{"{{lympht:vault:a#b}} and {{lympht:vault:c#d}}", true},
 		{"{{notlympht:a#b}}", false},
 	}
 	for _, c := range cases {
@@ -46,8 +46,8 @@ func TestHasPlaceholders(t *testing.T) {
 func TestSubstitute(t *testing.T) {
 	fetcher := &mockFetcher{
 		data: map[string]string{
-			"neunexus/foo#password": "secret123",
-			"neunexus/bar#api-key":  "key456",
+			"vault:neunexus/foo#password": "secret123",
+			"vault:neunexus/bar#api-key":  "key456",
 		},
 	}
 
@@ -60,31 +60,31 @@ func TestSubstitute(t *testing.T) {
 		{
 			// matching double-quotes stripped, value shell-quoted
 			name:  "double-quoted placeholder",
-			input: `vault kv put secret/x pass="{{lympht:neunexus/foo#password}}"`,
+			input: `vault kv put secret/x pass="{{lympht:vault:neunexus/foo#password}}"`,
 			want:  `vault kv put secret/x pass='secret123'`,
 		},
 		{
 			// unquoted placeholders get shell-quoted
 			name:  "unquoted placeholders",
-			input: `--pass={{lympht:neunexus/foo#password}} --key={{lympht:neunexus/bar#api-key}}`,
+			input: `--pass={{lympht:vault:neunexus/foo#password}} --key={{lympht:vault:neunexus/bar#api-key}}`,
 			want:  `--pass='secret123' --key='key456'`,
 		},
 		{
 			// single-quoted placeholder — common env-var pattern
 			name:  "single-quoted placeholder",
-			input: `PGPASSWORD='{{lympht:neunexus/foo#password}}' psql -U gopedia`,
+			input: `PGPASSWORD='{{lympht:vault:neunexus/foo#password}}' psql -U gopedia`,
 			want:  `PGPASSWORD='secret123' psql -U gopedia`,
 		},
 		{
 			// value with special chars gets properly shell-escaped
 			name: "special chars in value",
-			input: `PGPASSWORD={{lympht:neunexus/foo#password}} psql`,
+			input: `PGPASSWORD={{lympht:vault:neunexus/foo#password}} psql`,
 			want:  `PGPASSWORD='secret123' psql`,
 		},
 		{
 			// embedded inside larger double-quoted string — raw substitution preserved
 			name:  "embedded in larger quoted string",
-			input: `curl -H "Authorization: Bearer {{lympht:neunexus/bar#api-key}}"`,
+			input: `curl -H "Authorization: Bearer {{lympht:vault:neunexus/bar#api-key}}"`,
 			want:  `curl -H "Authorization: Bearer key456"`,
 		},
 		{
@@ -94,15 +94,15 @@ func TestSubstitute(t *testing.T) {
 		},
 		{
 			name:    "missing field returns error",
-			input:   `{{lympht:neunexus/foo#missing}}`,
+			input:   `{{lympht:vault:neunexus/foo#missing}}`,
 			wantErr: true,
 		},
 	}
 
 	// Verify single-quote escaping in value
 	t.Run("single quote in value", func(t *testing.T) {
-		f := &mockFetcher{data: map[string]string{"p#k": "it's"}}
-		got, err := inject.Substitute(`PGPASSWORD={{lympht:p#k}}`, f)
+		f := &mockFetcher{data: map[string]string{"vault:p#k": "it's"}}
+		got, err := inject.Substitute(`PGPASSWORD={{lympht:vault:p#k}}`, f)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -197,8 +197,8 @@ func TestSubstituteSpecialCharPasswords(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			f := &mockFetcher{data: map[string]string{"p#pw": c.password}}
-			got, err := inject.Substitute(`PGPASSWORD={{lympht:p#pw}} psql`, f)
+			f := &mockFetcher{data: map[string]string{"vault:p#pw": c.password}}
+			got, err := inject.Substitute(`PGPASSWORD={{lympht:vault:p#pw}} psql`, f)
 			if err != nil {
 				t.Fatalf("Substitute error: %v", err)
 			}
