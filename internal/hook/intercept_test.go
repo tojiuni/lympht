@@ -35,8 +35,8 @@ func TestRun_Passthrough(t *testing.T) {
 }
 
 func TestRun_SubstitutesPlaceholder(t *testing.T) {
-	input := `{"tool_name":"Bash","tool_input":{"command":"echo {{lympht:ns/foo#pass}}"}}`
-	fetcher := &mockFetcher{data: map[string]string{"ns/foo#pass": "secret99"}}
+	input := `{"tool_name":"Bash","tool_input":{"command":"echo {{lympht:vault:ns/foo#pass}}"}}`
+	fetcher := &mockFetcher{data: map[string]string{"vault:ns/foo#pass": "secret99"}}
 
 	var out strings.Builder
 	err := hook.RunWithFetcher(strings.NewReader(input), &out, fetcher)
@@ -73,7 +73,7 @@ func TestRun_NonBashToolPassthrough(t *testing.T) {
 }
 
 func TestRun_VaultErrorReturnsError(t *testing.T) {
-	input := `{"tool_name":"Bash","tool_input":{"command":"echo {{lympht:ns/missing#pass}}"}}`
+	input := `{"tool_name":"Bash","tool_input":{"command":"echo {{lympht:vault:ns/missing#pass}}"}}`
 	fetcher := &mockFetcher{data: map[string]string{}}
 	var out strings.Builder
 	err := hook.RunWithFetcher(strings.NewReader(input), &out, fetcher)
