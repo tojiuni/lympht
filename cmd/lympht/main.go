@@ -3,19 +3,19 @@ package main
 import (
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/tojiuni/lympht/internal/hook"
 	"github.com/tojiuni/lympht/internal/inject"
+	"github.com/tojiuni/lympht/internal/kube"
 	"github.com/tojiuni/lympht/internal/vault"
 )
 
 func main() {
 	root := &cobra.Command{
 		Use:   "lympht",
-		Short: "LLM-safe Vault secret injector for Claude Code",
+		Short: "LLM-safe secret injector for Claude Code",
 	}
 	root.AddCommand(hookInterceptCmd())
 	root.AddCommand(injectCmd())
@@ -27,16 +27,27 @@ func main() {
 	}
 }
 
+func newMultiFetcher() (*inject.MultiFetcher, error) {
+	vaultClient, err := vault.NewClient()
+	if err != nil {
+		return nil, err
+	}
+	return &inject.MultiFetcher{
+		Vault: vaultClient,
+		Kube:  kube.NewClient(),
+	}, nil
+}
+
 func hookInterceptCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "hook-intercept",
 		Short: "PreToolUse hook entry point — reads tool call JSON from stdin",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := vault.NewClient()
+			multi, err := newMultiFetcher()
 			if err != nil {
 				return err
 			}
-			return hook.RunWithFetcher(os.Stdin, os.Stdout, client)
+			return hook.RunWithFetcher(os.Stdin, os.Stdout, multi)
 		},
 	}
 }
@@ -50,11 +61,11 @@ func injectCmd() *cobra.Command {
 				return fmt.Errorf("usage: lympht inject -- <command with placeholders>")
 			}
 			raw := strings.Join(args, " ")
-			client, err := vault.NewClient()
+			multi, err := newMultiFetcher()
 			if err != nil {
 				return err
 			}
-			resolved, err := inject.Substitute(raw, client)
+			resolved, err := inject.Substitute(raw, multi)
 			if err != nil {
 				return err
 			}
@@ -66,19 +77,18 @@ func injectCmd() *cobra.Command {
 
 func checkCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "check <vault-path>",
-		Short: "List fields at a Vault path (values masked)",
+		Use:   "check <path>",
+		Short: "List fields at a secret path (values masked). Use vault: or k8s: prefix.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := vault.NewClient()
+			multi, err := newMultiFetcher()
 			if err != nil {
 				return err
 			}
-			fields, err := client.ListFields(args[0])
+			fields, err := multi.ListFields(args[0])
 			if err != nil {
 				return err
 			}
-			sort.Strings(fields)
 			fmt.Printf("Fields at %s:\n", args[0])
 			for _, f := range fields {
 				fmt.Printf("  ✓ %s\n", f)
