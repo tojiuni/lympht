@@ -45,9 +45,27 @@ func hookInterceptCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			multi, err := newMultiFetcher()
 			if err != nil {
-				return err
+				// exit(2), not a plain returned error: Claude Code's PreToolUse
+				// hook contract treats exit code 2 as BLOCKING (the tool call
+				// is aborted) and any other non-zero exit as non-blocking
+				// (stderr is shown, but the ORIGINAL, unsubstituted command
+				// still runs). Returning this error up to root.Execute() would
+				// hit main()'s generic os.Exit(1) below, which silently lets
+				// the raw {{lympht:...}} placeholder text through as if it
+				// were real data (infra-lympht-silent-substitution-failure-on-403)
+				// — e.g. a 403 from a vault path outside the ambient
+				// identity's policy scope must never look like a successful
+				// substitution. inject/check commands are unaffected: their
+				// errors still flow through the normal RunE -> Execute()
+				// path and exit 1, which has no special meaning to them.
+				fmt.Fprintln(os.Stderr, "lympht hook-intercept: fetcher init failed:", err)
+				os.Exit(2)
 			}
-			return hook.RunWithFetcher(os.Stdin, os.Stdout, multi)
+			if err := hook.RunWithFetcher(os.Stdin, os.Stdout, multi); err != nil {
+				fmt.Fprintln(os.Stderr, "lympht hook-intercept: substitution failed:", err)
+				os.Exit(2)
+			}
+			return nil
 		},
 	}
 }
