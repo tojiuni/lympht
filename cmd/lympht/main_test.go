@@ -81,7 +81,7 @@ func TestHookIntercept_BlocksOnFetchFailure(t *testing.T) {
 	if stdout.Len() != 0 {
 		t.Errorf("stdout must stay empty on failure — no hookResponse (and no placeholder passthrough) — got %q", stdout.String())
 	}
-	if !strings.Contains(stderr.String(), "substitution failed") {
+	if !strings.Contains(stderr.String(), "blocked") {
 		t.Errorf("stderr should explain the failure, got %q", stderr.String())
 	}
 }

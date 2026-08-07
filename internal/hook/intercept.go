@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/tojiuni/lympht/internal/guard"
 	"github.com/tojiuni/lympht/internal/inject"
 )
 
@@ -28,9 +29,13 @@ type hookResponse struct {
 }
 
 // RunWithFetcher reads a Claude Code PreToolUse JSON payload from r.
-// If the Bash command contains lympht placeholders, substitutes them using
-// fetcher and writes the modify response JSON to w.
-// If no placeholders or non-Bash tool, writes nothing (passthrough, exit 0).
+// Every Bash command is checked against guard.CheckCommand first —
+// independent of whether it contains any lympht placeholder — and a match
+// there returns an error (which the caller turns into a blocking exit(2),
+// see cmd/lympht/main.go's hookInterceptCmd). Otherwise, if the command
+// contains lympht placeholders, substitutes them using fetcher and writes
+// the modify response JSON to w. If no placeholders or non-Bash tool, writes
+// nothing (passthrough, exit 0).
 func RunWithFetcher(r io.Reader, w io.Writer, fetcher inject.Fetcher) error {
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -42,7 +47,15 @@ func RunWithFetcher(r io.Reader, w io.Writer, fetcher inject.Fetcher) error {
 		return fmt.Errorf("parsing tool call JSON: %w", err)
 	}
 
-	if call.ToolName != "Bash" || !inject.HasPlaceholders(call.ToolInput.Command) {
+	if call.ToolName != "Bash" {
+		return nil // passthrough: write nothing
+	}
+
+	if err := guard.CheckCommand(call.ToolInput.Command); err != nil {
+		return err
+	}
+
+	if !inject.HasPlaceholders(call.ToolInput.Command) {
 		return nil // passthrough: write nothing
 	}
 
