@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -20,6 +22,7 @@ func main() {
 	root.AddCommand(hookInterceptCmd())
 	root.AddCommand(injectCmd())
 	root.AddCommand(checkCmd())
+	root.AddCommand(installCmd())
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -88,6 +91,59 @@ func injectCmd() *cobra.Command {
 				return err
 			}
 			fmt.Println(resolved)
+			return nil
+		},
+	}
+}
+
+// installCmd copies this running binary to dest, atomically (write to
+// dest+".tmp" in the same directory, then rename — rename is atomic within
+// a filesystem, so a reader never observes a partially-written file, and a
+// process already running the old inode keeps working until it exits).
+//
+// This exists because the lympht image is FROM scratch (no shell, no `cp`)
+// — the standard "shell initContainer copies a binary onto a shared PVC"
+// pattern doesn't work here. Running `lympht install <dest>` as the
+// initContainer's command needs nothing but the binary itself.
+func installCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "install <dest>",
+		Short: "Copy this binary to dest (atomic rename). For scratch-image initContainers with no shell/cp.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dest := args[0]
+			self, err := os.Executable()
+			if err != nil {
+				return fmt.Errorf("resolving own executable path: %w", err)
+			}
+			src, err := os.Open(self)
+			if err != nil {
+				return fmt.Errorf("opening %s: %w", self, err)
+			}
+			defer src.Close()
+
+			if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+				return fmt.Errorf("creating %s: %w", filepath.Dir(dest), err)
+			}
+			tmp := dest + ".tmp"
+			out, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
+			if err != nil {
+				return fmt.Errorf("creating %s: %w", tmp, err)
+			}
+			if _, err := io.Copy(out, src); err != nil {
+				out.Close()
+				os.Remove(tmp)
+				return fmt.Errorf("copying to %s: %w", tmp, err)
+			}
+			if err := out.Close(); err != nil {
+				os.Remove(tmp)
+				return fmt.Errorf("closing %s: %w", tmp, err)
+			}
+			if err := os.Rename(tmp, dest); err != nil {
+				os.Remove(tmp)
+				return fmt.Errorf("renaming %s to %s: %w", tmp, dest, err)
+			}
+			fmt.Println("OK: installed to", dest)
 			return nil
 		},
 	}
