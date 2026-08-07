@@ -81,3 +81,35 @@ func TestRun_VaultErrorReturnsError(t *testing.T) {
 		t.Fatal("expected error when vault lookup fails")
 	}
 }
+
+// TestRun_BlocksDangerousCommandEvenWithoutPlaceholder guards the actual
+// incidents this feature exists for: a raw `kubectl get secret -o yaml`
+// contains no {{lympht:...}} placeholder at all, so the substitution path
+// never used to see it — it always fell through to plain passthrough. The
+// guard check must run for every Bash command, independent of placeholders.
+func TestRun_BlocksDangerousCommandEvenWithoutPlaceholder(t *testing.T) {
+	input := `{"tool_name":"Bash","tool_input":{"command":"kubectl get secret github-credentials -n tekton-pipelines -o yaml"}}`
+	var out strings.Builder
+	err := hook.RunWithFetcher(strings.NewReader(input), &out, &mockFetcher{})
+	if err == nil {
+		t.Fatal("expected the dangerous command to be blocked")
+	}
+	if out.Len() != 0 {
+		t.Errorf("blocked command must not write a hookResponse, got: %q", out.String())
+	}
+}
+
+// TestRun_AllowsBenignCommandUnaffectedByGuard is the regression guard for
+// the guard check itself: it must not start blocking ordinary commands that
+// happen to contain unrelated words.
+func TestRun_AllowsBenignCommandUnaffectedByGuard(t *testing.T) {
+	input := `{"tool_name":"Bash","tool_input":{"command":"kubectl get secret iam-db -n iam"}}`
+	var out strings.Builder
+	err := hook.RunWithFetcher(strings.NewReader(input), &out, &mockFetcher{})
+	if err != nil {
+		t.Fatalf("unexpected error for a plain 'get secret' with no -o yaml/json: %v", err)
+	}
+	if out.Len() != 0 {
+		t.Errorf("expected empty output for passthrough, got: %q", out.String())
+	}
+}

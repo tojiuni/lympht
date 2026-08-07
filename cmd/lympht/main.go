@@ -65,7 +65,7 @@ func hookInterceptCmd() *cobra.Command {
 				os.Exit(2)
 			}
 			if err := hook.RunWithFetcher(os.Stdin, os.Stdout, multi); err != nil {
-				fmt.Fprintln(os.Stderr, "lympht hook-intercept: substitution failed:", err)
+				fmt.Fprintln(os.Stderr, "lympht hook-intercept: blocked:", err)
 				os.Exit(2)
 			}
 			return nil
