@@ -7,6 +7,7 @@ import (
 
 	"github.com/tojiuni/lympht/internal/guard"
 	"github.com/tojiuni/lympht/internal/inject"
+	"github.com/tojiuni/lympht/internal/scope"
 )
 
 type toolCall struct {
@@ -29,13 +30,22 @@ type hookResponse struct {
 }
 
 // RunWithFetcher reads a Claude Code PreToolUse JSON payload from r.
-// Every Bash command is checked against guard.CheckCommand first —
-// independent of whether it contains any lympht placeholder — and a match
-// there returns an error (which the caller turns into a blocking exit(2),
-// see cmd/lympht/main.go's hookInterceptCmd). Otherwise, if the command
-// contains lympht placeholders, substitutes them using fetcher and writes
-// the modify response JSON to w. If no placeholders or non-Bash tool, writes
-// nothing (passthrough, exit 0).
+// Every Bash command is checked, in order:
+//  1. scope.RecordIfProviderRequested — a side effect, never blocks: if this
+//     command is a tokenhub credential fetch, remember that provider as
+//     active for its TTL window.
+//  2. guard.CheckCommand — always-on secret-exposure pattern blocks,
+//     independent of any active provider (see package guard's doc comment
+//     for why these can never be "unlocked" by an elevation).
+//  3. scope.CheckCommand — provider-scoped gating of specific high-privilege
+//     kubectl actions (exec, secret reads, node/argocd/tekton mutations)
+//     against the currently active provider set.
+//
+// Any of 2/3 returning an error returns that error (the caller turns it into
+// a blocking exit(2), see cmd/lympht/main.go's hookInterceptCmd). Otherwise,
+// if the command contains lympht placeholders, substitutes them using
+// fetcher and writes the modify response JSON to w. If no placeholders or
+// non-Bash tool, writes nothing (passthrough, exit 0).
 func RunWithFetcher(r io.Reader, w io.Writer, fetcher inject.Fetcher) error {
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -51,7 +61,13 @@ func RunWithFetcher(r io.Reader, w io.Writer, fetcher inject.Fetcher) error {
 		return nil // passthrough: write nothing
 	}
 
+	scope.RecordIfProviderRequested(call.ToolInput.Command)
+
 	if err := guard.CheckCommand(call.ToolInput.Command); err != nil {
+		return err
+	}
+
+	if err := scope.CheckCommand(call.ToolInput.Command); err != nil {
 		return err
 	}
 
