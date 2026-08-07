@@ -32,7 +32,15 @@ func buildBinary(t *testing.T) string {
 	}
 	t.Cleanup(func() { os.RemoveAll(dir) })
 	bin := filepath.Join(dir, "lympht")
-	cmd := exec.Command("go", "build", "-o", bin, ".")
+	// -buildvcs=false: this repo's CI runs `go test`/`go build` against a
+	// git checkout on a shared Tekton PVC workspace where `git status`
+	// fails with a dubious-ownership error (exit 128) — `go build` tries
+	// to embed VCS info by default and aborts with "error obtaining VCS
+	// status" unless told not to bother. Confirmed via a manual debug
+	// PipelineRun capturing real test-run logs (this failure has no
+	// archived logs in the normal CI run, and locally it doesn't
+	// reproduce — the checkout here isn't on that shared PVC).
+	cmd := exec.Command("go", "build", "-buildvcs=false", "-o", bin, ".")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("build failed: %v\n%s", err, out)
