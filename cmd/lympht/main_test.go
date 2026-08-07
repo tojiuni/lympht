@@ -11,14 +11,36 @@ import (
 	"testing"
 )
 
-// buildBinary compiles the current package once per test run into a
-// temp dir, so these tests exercise the real os.Exit() behavior of
-// hook-intercept — something in-process unit tests can't observe.
+// buildBinary compiles the current package once per test run, so these
+// tests can exercise the real os.Exit() behavior of hook-intercept and
+// run the resulting binary as a subprocess — something in-process unit
+// tests can't observe.
+//
+// Built into ./.testbin (relative to this package), NOT t.TempDir(): some
+// hardened CI runners mount /tmp noexec, which lets `go build` write the
+// binary there but makes exec.Command fail to actually run it. Building
+// next to the source keeps it on whatever filesystem `go test` itself
+// already runs from, which must be exec-able.
 func buildBinary(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
+	dir, err := filepath.Abs(filepath.Join(".", ".testbin"))
+	if err != nil {
+		t.Fatalf("resolving build dir: %v", err)
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("creating build dir: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
 	bin := filepath.Join(dir, "lympht")
-	cmd := exec.Command("go", "build", "-o", bin, ".")
+	// -buildvcs=false: this repo's CI runs `go test`/`go build` against a
+	// git checkout on a shared Tekton PVC workspace where `git status`
+	// fails with a dubious-ownership error (exit 128) — `go build` tries
+	// to embed VCS info by default and aborts with "error obtaining VCS
+	// status" unless told not to bother. Confirmed via a manual debug
+	// PipelineRun capturing real test-run logs (this failure has no
+	// archived logs in the normal CI run, and locally it doesn't
+	// reproduce — the checkout here isn't on that shared PVC).
+	cmd := exec.Command("go", "build", "-buildvcs=false", "-o", bin, ".")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("build failed: %v\n%s", err, out)
