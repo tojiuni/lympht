@@ -1,14 +1,39 @@
 package hook
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"strings"
 
 	"github.com/tojiuni/lympht/internal/guard"
 	"github.com/tojiuni/lympht/internal/inject"
 	"github.com/tojiuni/lympht/internal/scope"
 )
+
+// ModeEnv selects how placeholders are resolved. Unset (default) keeps the
+// original behaviour: the hook substitutes the value into the command.
+// ModeRuntime defers substitution to `lympht run`.
+const (
+	ModeEnv     = "LYMPHT_HOOK_MODE"
+	ModeRuntime = "runtime"
+)
+
+// SelfPath is the lympht binary the wrapper invokes; tests override it.
+var SelfPath = func() string {
+	p, err := os.Executable()
+	if err != nil {
+		return "lympht"
+	}
+	return p
+}
+
+func wrapper(original string) string {
+	q := "'" + strings.ReplaceAll(SelfPath(), "'", `'\''`) + "'"
+	return q + " run --b64 " + base64.StdEncoding.EncodeToString([]byte(original))
+}
 
 type toolCall struct {
 	ToolName  string `json:"tool_name"`
@@ -75,9 +100,18 @@ func RunWithFetcher(r io.Reader, w io.Writer, fetcher inject.Fetcher) error {
 		return nil // passthrough: write nothing
 	}
 
+	// Resolve once either way: in runtime mode this only validates (a 403 or
+	// missing field still blocks here, as before) and the value is dropped.
 	substituted, err := inject.Substitute(call.ToolInput.Command, fetcher)
 	if err != nil {
 		return err
+	}
+	if os.Getenv(ModeEnv) == ModeRuntime {
+		// The harness stores the hook's stdout in the session transcript, so
+		// the resolved command must not appear in it. Emit a wrapper that
+		// carries only the placeholder text; `lympht run` resolves it at
+		// execution time (spec NEU-SPC-DRAFT-20261104).
+		substituted = wrapper(call.ToolInput.Command)
 	}
 
 	var resp hookResponse

@@ -11,6 +11,7 @@ import (
 	"github.com/tojiuni/lympht/internal/hook"
 	"github.com/tojiuni/lympht/internal/inject"
 	"github.com/tojiuni/lympht/internal/kube"
+	"github.com/tojiuni/lympht/internal/runner"
 	"github.com/tojiuni/lympht/internal/vault"
 )
 
@@ -21,6 +22,7 @@ func main() {
 	}
 	root.AddCommand(hookInterceptCmd())
 	root.AddCommand(injectCmd())
+	root.AddCommand(runCmd())
 	root.AddCommand(checkCmd())
 	root.AddCommand(installCmd())
 
@@ -71,6 +73,30 @@ func hookInterceptCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// runCmd is the execution-time half of LYMPHT_HOOK_MODE=runtime: it resolves
+// the placeholders of a base64-encoded command, runs it and masks the output.
+func runCmd() *cobra.Command {
+	var b64 string
+	c := &cobra.Command{
+		Use:   "run --b64 <base64 command>",
+		Short: "Resolve placeholders at execution time, run the command, mask secrets in its output",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			multi, err := newMultiFetcher()
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "lympht run: fetcher init failed:", err)
+				os.Exit(2)
+			}
+			code := runner.Run(b64, multi, runner.Options{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr})
+			os.Exit(code)
+			return nil
+		},
+	}
+	c.Flags().StringVar(&b64, "b64", "", "base64-encoded command containing placeholders")
+	_ = c.MarkFlagRequired("b64")
+	return c
 }
 
 func injectCmd() *cobra.Command {
